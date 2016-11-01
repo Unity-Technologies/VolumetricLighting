@@ -1,0 +1,38 @@
+﻿// Based on 'Volumetric fog: Unified, compute shader based solution to atmospheric scattering, ACM Siggraph 2014'
+// https://bartwronski.com/publications/
+
+#pragma kernel CSMain
+#define VOLUME_DEPTH 128
+
+Texture3D _VolumeInject;
+RWTexture3D<float4> _VolumeScatter;
+
+float Extinction(float density)
+{
+	return exp(-density);
+}
+
+void WriteOutput(in uint3 pos, in float4 colorAndDensity)
+{
+	_VolumeScatter[pos] = float4(colorAndDensity.rgb, Extinction(colorAndDensity.a));
+}
+
+float4 AccumulateScattering(float4 colorAndDensityFront, float4 colorAndDensityBack)
+{
+	float3 light = colorAndDensityFront.rgb + saturate(Extinction(colorAndDensityFront.a)) * colorAndDensityBack.rgb;
+	return float4(light.rgb, colorAndDensityFront.a + colorAndDensityBack.a);
+}
+
+[numthreads(32, 2, 1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	float4 currentSlice = _VolumeInject[uint3(id.xy, 0)];
+	WriteOutput(uint3(id.xy, 0), currentSlice);
+
+	for(uint z = 1; z < VOLUME_DEPTH; z++)
+	{
+		float4 nextValue = _VolumeInject[uint3(id.xy, z)];
+		currentSlice = AccumulateScattering(currentSlice, nextValue);
+		WriteOutput(uint3(id.xy, z), currentSlice);
+	}
+}

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 792909cacf2415c48a1d7eebef426b5d
+timeCreated: 1453121021
+licenseType: Pro
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences:
+  - m_Cube: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  - m_ProxyShader: {fileID: 4800000, guid: 2b28be3523d190a41910088d1ee68ef7, type: 3}
+  - m_Quad: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+  - m_ShadowmapShader: {fileID: 4800000, guid: 2c4cd42b134f7864fa579350e9cf6896, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

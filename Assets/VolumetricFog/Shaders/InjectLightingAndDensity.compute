@@ -1,0 +1,538 @@
+#pragma kernel CSMain TUBE_LIGHTS TUBE_LIGHT_SHADOW_PLANES FOG_ELLIPSOIDS ANISOTROPY AREA_LIGHTS POINT_LIGHTS
+
+// Directional light support not quite ready yet
+// #pragma kernel CSMain TUBE_LIGHTS TUBE_LIGHT_SHADOW_PLANES FOG_ELLIPSOIDS ANISOTROPY AREA_LIGHTS POINT_LIGHTS DIR_LIGHT
+
+#define TUBE_LIGHT_ATTENUATION_LEGACY 1
+#include "..\..\TubeLight\Shaders\TubeLightAttenuation.cginc"
+
+#ifdef TUBE_LIGHT_SHADOW_PLANES
+	#include "..\..\TubeLight\Shaders\TubeLightShadowPlanes.cginc"
+#endif
+
+RWTexture3D<half4> _VolumeInject;
+Texture2D _Shadowmap;
+SamplerState sampler_Shadowmap;
+float4 _FrustumRays[4];
+float4 _CameraPos;
+float4 _FrustumRaysLight[4];
+float4 _CameraPosLight;
+float _Density;
+float _Intensity;
+float _Anisotropy;
+Texture2D _Noise;
+SamplerState sampler_Noise;
+float4 _FogParams;
+float _NoiseFogAmount;
+float _NoiseFogScale;
+float _WindSpeed;
+float3 _WindDir;
+float _Time;
+Texture2D _LightTextureB0;
+SamplerState sampler_LightTextureB0;
+float _NearOverFarClip;
+float3 _AmbientLight;
+#ifdef FOG_BOMB
+float _FogBombRadius;
+float3 _FogBombPos;
+#endif
+
+#ifdef DIR_LIGHT
+float3 _DirLightColor;
+float3 _DirLightDir;
+#ifdef DIR_LIGHT_SHADOWS
+float _DirLightShadows;
+float _ESMExponentDirLight;
+struct ShadowParams
+{
+	float4x4 worldToShadow[4];
+	float4 shadowSplitSpheres[4];
+	float4 shadowSplitSqRadii;
+};
+RWStructuredBuffer<ShadowParams> _ShadowParams;
+Texture2D _DirectionalShadowmap;
+SamplerState sampler_DirectionalShadowmap;
+#endif
+#endif
+
+#ifdef POINT_LIGHTS
+struct PointLight
+{
+	float3 pos;
+	float range;
+	float3 color;
+	float padding;
+};
+StructuredBuffer<PointLight> _PointLights;
+float _PointLightsCount;
+#endif
+
+#ifdef TUBE_LIGHTS
+struct TubeLight
+{
+	float3 start;
+	float range;
+	float3 end;
+	float radius;
+	float3 color;
+	float padding;
+};
+StructuredBuffer<TubeLight> _TubeLights;
+float _TubeLightsCount;
+
+#ifdef TUBE_LIGHT_SHADOW_PLANES
+// Same count as _TubeLightsCount
+StructuredBuffer<TubeLightShadowPlane> _TubeLightShadowPlanes;
+#endif
+
+#endif // TUBE_LIGHTS
+
+#ifdef AREA_LIGHTS
+struct AreaLight
+{
+	float4x4 mat;
+	float4 pos; // only needed for anisotropy. w: 0 ortho, 1 proj
+	float3 color;
+	float bounded;
+};
+StructuredBuffer<AreaLight> _AreaLights;
+float _AreaLightsCount;
+Texture2D _AreaLightShadowmap;
+SamplerState sampler_AreaLightShadowmap;
+float _ShadowedAreaLightIndex;
+float4 _AreaLightShadowmapZParams;
+float _ESMExponentAreaLight;
+#endif
+
+#ifdef FOG_ELLIPSOIDS
+struct FogEllipsoid
+{
+	float3 pos;
+	float radius;
+	float3 axis;
+	float stretch;
+	float density;
+	float noiseAmount;
+	float noiseSpeed;
+	float noiseScale;
+	float feather;
+	float blend;
+	float padding1;
+	float padding2;
+};
+StructuredBuffer<FogEllipsoid> _FogEllipsoids;
+float _FogEllipsoidsCount;
+#endif
+
+float hash( float n ) { return frac(sin(n)*753.5453123); }
+float noisep(float3 x)
+{
+    float3 p = floor(x);
+    float3 f = frac(x);
+    f = f*f*(3.0-2.0*f);
+	
+    float n = p.x + p.y*157.0 + 113.0*p.z;
+    return lerp(lerp(lerp( hash(n+  0.0), hash(n+  1.0),f.x),
+                   lerp( hash(n+157.0), hash(n+158.0),f.x),f.y),
+               lerp(lerp( hash(n+113.0), hash(n+114.0),f.x),
+                   lerp( hash(n+270.0), hash(n+271.0),f.x),f.y),f.z);
+}
+
+float noise(float3 x)
+{
+	float3 p = floor(x);
+	float3 f = frac(x);
+	f = f * f * (3.0 - 2.0 * f);
+	float2 uv = (p.xy + float2(37.0,17.0) * p.z) + f.xy;
+	float2 rg = _Noise.SampleLevel(sampler_Noise, (uv + 0.5) / 256.0, 0).yx;
+	return -1.0 + 2.0 * lerp(rg.x, rg.y, f.z);
+}
+
+float ScrollNoise(float3 pos, float speed, float scale, float3 dir, float amount, float bias = 0.0, float mult = 1.0)
+{
+	float time = _Time * speed;
+	float noiseScale = scale;
+	float3 noiseScroll = dir * time;
+	float3 q = pos - noiseScroll;
+	q *= scale;
+	float f = 0;
+	f = 0.5 * noisep(q);
+	// scroll the next octave in the opposite direction to get some morphing instead of just scrolling
+	q += noiseScroll * scale;
+	q = q * 2.01;
+	f += 0.25 * noisep(q);
+
+	f += bias;
+	f *= mult;
+
+	f = max(f, 0.0);
+	return lerp(1.0, f, amount);
+}
+
+#ifdef FOG_ELLIPSOIDS
+void FogEllipsoids(float3 pos, inout float density)
+{
+	for (int i = 0; i < _FogEllipsoidsCount; i++)
+	{
+		float3 dir = _FogEllipsoids[i].pos - pos;
+		float3 axis = _FogEllipsoids[i].axis;
+		float3 dirAlongAxis = dot(dir, axis) * axis;
+
+		float scrollNoise = ScrollNoise(dir, _FogEllipsoids[i].noiseSpeed, _FogEllipsoids[i].noiseScale, axis, _FogEllipsoids[i].noiseAmount);
+
+		dir = dir + dirAlongAxis * _FogEllipsoids[i].stretch;
+		float distsq = dot(dir, dir);
+		float radius = _FogEllipsoids[i].radius;
+		float feather = _FogEllipsoids[i].feather;
+		// float feather = 0.3;
+		feather = (1.0 - smoothstep (radius * feather, radius, distsq));
+
+		float contribution = scrollNoise * feather * _FogEllipsoids[i].density;
+		density = lerp(density + contribution, density * contribution, _FogEllipsoids[i].blend);
+	}
+}
+#endif
+
+#ifdef FOG_BOMB
+float Pulse(float c, float w, float x)
+{
+	return smoothstep(c - w, c, x) - smoothstep(c, c + w, x);
+}
+#endif
+
+float Density(float3 pos)
+{
+	float fog = _FogParams.x;
+
+	fog += max(exp(_FogParams.y*(-pos.y + _FogParams.z)) * _FogParams.w, 0.0);
+
+	float3 warp = pos;
+
+	#ifdef FOG_BOMB
+	if (_FogBombRadius > 0)
+	{
+		float3 posToBomb = _FogBombPos - pos;
+		float distToBomb = length(posToBomb);
+		fog *= smoothstep (_FogBombRadius * 0.9, _FogBombRadius * 1.1, distToBomb);
+		fog *= 1.0 + 0.5 * Pulse(_FogBombRadius * 1.35, 0.7, distToBomb);
+		warp += (1 - smoothstep(_FogBombRadius, _FogBombRadius * 1.4, distToBomb)) * posToBomb * 0.3;
+	}
+	#endif
+
+	fog *= ScrollNoise(warp, _WindSpeed, _NoiseFogScale, _WindDir, _NoiseFogAmount, -0.3, 8.0);
+
+	#ifdef FOG_ELLIPSOIDS
+	FogEllipsoids(pos, fog);
+	#endif
+
+	return max(fog * _Density, 0.0);
+}
+
+float3 FrustumRay(float2 uv, float4 frustumRays[4])
+{
+	float3 ray0 = lerp(frustumRays[0].xyz, frustumRays[1].xyz, uv.x);
+	float3 ray1 = lerp(frustumRays[3].xyz, frustumRays[2].xyz, uv.x);
+	return lerp(ray0, ray1, uv.y);
+}
+
+#ifdef ANISOTROPY
+float anisotropy(float costheta)
+{
+	float g = _Anisotropy;
+	float gsq = g*g;
+	float denom = 1 + gsq - 2.0 * g * costheta;
+	denom = denom * denom * denom;
+	denom = sqrt(max(0, denom));
+	return (1 - gsq) / denom;
+}
+#endif
+
+#if AREA_LIGHTS || DIR_LIGHT_SHADOWS
+#define VSM 1
+#if VSM
+float ChebyshevUpperBound(float2 moments, float mean)
+{
+	// Compute variance
+	float variance = moments.y - (moments.x * moments.x);
+	float _VSMBias = 0.001f;
+	variance = max(variance, _VSMBias * mean * mean);
+
+	// Compute probabilistic upper bound
+	float d = mean - moments.x;
+	float pMax = variance / (variance + (d * d));
+
+	// One-tailed Chebyshev
+	return (mean <= moments.x ? 1.0f : pMax);
+}
+#endif
+#endif
+
+#if DIR_LIGHT
+#if DIR_LIGHT_SHADOWS
+float4 getCascadeWeights_splitSpheres(float3 pos)
+{
+	float3 fromCenter0 = pos - _ShadowParams[0].shadowSplitSpheres[0].xyz;
+	float3 fromCenter1 = pos - _ShadowParams[0].shadowSplitSpheres[1].xyz;
+	float3 fromCenter2 = pos - _ShadowParams[0].shadowSplitSpheres[2].xyz;
+	float3 fromCenter3 = pos - _ShadowParams[0].shadowSplitSpheres[3].xyz;
+	float4 distances2 = float4(dot(fromCenter0,fromCenter0), dot(fromCenter1,fromCenter1), dot(fromCenter2,fromCenter2), dot(fromCenter3,fromCenter3));
+	float4 weights = float4(distances2 >= _ShadowParams[0].shadowSplitSqRadii);
+	return weights;
+}
+
+float4 getShadowCoord(float3 pos, float4 cascadeWeights)
+{
+	return mul(_ShadowParams[0].worldToShadow[(int)dot(cascadeWeights, float4(1,1,1,1))], float4(pos, 1));
+}
+#endif
+
+float3 DirectionalLight(float3 pos)
+{
+	if (!any(_DirLightColor))
+		return 0;
+
+	float att = 1;
+
+	#if DIR_LIGHT_SHADOWS
+	if (_DirLightShadows > 0.0)
+	{
+		float4 cascadeWeights = getCascadeWeights_splitSpheres(pos);
+		//bool inside = dot(cascadeWeights, float4(1,1,1,1)) < 4;
+		float3 samplePos = getShadowCoord(pos, cascadeWeights).xyz;
+		//occlusion += inside ? UNITY_SAMPLE_SHADOW(u_CascadedShadowMap, samplePos) : 1.f;
+		#if 1
+		att *= _DirectionalShadowmap.SampleLevel(sampler_DirectionalShadowmap, samplePos.xy, 0).r > samplePos.z;
+		#else
+		float2 shadowmap = _DirectionalShadowmap.SampleLevel(sampler_DirectionalShadowmap, samplePos, 0).xy;
+		att *= ChebyshevUpperBound(shadowmap.xy, samplePos.z);
+
+		// float depth = exp(-40.0 * samplePos.z);
+		// att = saturate(shadowmap.r * depth);
+		#endif
+	}
+	#endif
+
+	#if ANISOTROPY
+	float3 posToCamera = normalize(_CameraPos.xyz - pos);
+	float costheta = dot(posToCamera, _DirLightDir);
+	att *= anisotropy(costheta);
+	#endif
+
+	return _DirLightColor * att;
+}
+#endif
+
+#ifdef POINT_LIGHTS
+float3 PointLights(float3 pos)
+{
+	float3 color = 0;
+	for (int i = 0; i < _PointLightsCount; i++)
+	{
+		float3 posToLight = _PointLights[i].pos - pos;
+		float distNorm = dot(posToLight, posToLight) * _PointLights[i].range;
+		float att = Attenuation(distNorm);
+
+		#if ANISOTROPY
+		float3 cameraToPos = normalize(pos - _CameraPos.xyz);
+		float costheta = dot(cameraToPos, normalize(posToLight));
+		att *= anisotropy(costheta);
+		#endif
+
+		color += _PointLights[i].color * att;
+	}
+	return color;
+}
+#endif
+
+#ifdef TUBE_LIGHTS
+float almostIdentity(float x, float m, float n)
+{
+	if (x > m)
+		return x;
+
+	float a = 2.0f*n - m;
+	float b = 2.0f*m - 3.0f*n;
+	float t = x/m;
+
+	return (a*t + b)*t*t + n;
+}
+
+float3 TubeLights(float3 pos)
+{
+	float3 color = 0;
+	for (int i = 0; i < _TubeLightsCount; i++)
+	{
+		float3 L0 = _TubeLights[i].start - pos;
+		float3 L1 = _TubeLights[i].end - pos;
+		float distNorm = 0.5f * (length(L0) * length(L1) + dot(L0, L1)) * _TubeLights[i].range;
+		float att = Attenuation(distNorm);
+
+		#if ANISOTROPY
+		// Just like when calculating specular for area lights:
+		// assume forward scattering lobe -> the point on the light that's the closest to
+		// the view direction is representative
+		float3 posToCamera = normalize(pos - _CameraPos.xyz);
+		float3 r = -posToCamera;
+		float3 Ld = L1 - L0;
+		float L0oL0 = dot(L0, L0);
+		float RoL0 = dot(r, L0);
+		float RoLd = dot(r, Ld);
+		float L0oLd	= dot(L0, Ld);
+		float LdoLd = dot(Ld, Ld);
+		float distLd = sqrt(LdoLd);
+
+		#if 1
+			// Smallest angle to ray
+			float t = (L0oLd * RoL0 - L0oL0 * RoLd) / (L0oLd * RoLd - LdoLd * RoL0);
+			t = saturate(t);
+
+			// As r becomes parallel to Ld and then points away, t flips from 0 to 1 (or vv) and a discontinuity shows up.
+			// Counteract by detecting that relative angle/position and flip t. The discontinuity in t moves to the back side.
+			float3 L0xLd = cross(L0, Ld);
+			float3 LdxR = cross(Ld, r);
+			float RAtLd = dot(L0xLd, LdxR);
+
+			// RAtLd is negative if R points away from Ld.
+			// TODO: check if lerp below is indeed cheaper.
+			// if (RAtLd < 0)
+			// 	t = 1 - t;
+			t = lerp(1 - t, t, step(0, RAtLd));
+
+		#else
+			// Original by Karis
+			// Closest distance to ray
+			float t = (RoL0 * RoLd - L0oLd) / (distLd * distLd - RoLd * RoLd);
+			t = saturate(t);
+
+		#endif
+		float3 closestPoint = L0 + Ld * t;
+		float3 centerToRay = dot(closestPoint, r) * r - closestPoint;
+		// closestPoint = closestPoint + centerToRay * saturate(_TubeLights[i].radius / length(centerToRay));
+		float centerToRayNorm = length(centerToRay) / _TubeLights[i].radius;
+		// The last param should in theory be 1
+		centerToRayNorm = almostIdentity(centerToRayNorm, 2, 1.2);
+		closestPoint = closestPoint + centerToRay / centerToRayNorm;
+
+		// Attenuation from the closest point looks really good if there's anisotropy, but breaks
+		// for (close to) isotropic medium. Probably because there's no forward lobe anymore, so
+		// the closest point to the view direction is not representative? But artifacts look like
+		// smth else is going on too.
+		// att = Attenuation(dot(closestPoint, closestPoint) * _TubeLights[i].range);
+		
+		float costheta = dot(posToCamera, normalize(closestPoint));
+		att *= anisotropy(costheta);
+		#endif
+
+		#ifdef TUBE_LIGHT_SHADOW_PLANES
+		att *= ShadowPlanes(pos, _TubeLightShadowPlanes[i]);
+		#endif
+
+		// GDC hack
+		att = isnan(att) || isinf(att) ? 0 : att;
+
+		color += _TubeLights[i].color * att;
+	}
+	return color;
+}
+#endif
+
+#ifdef AREA_LIGHTS
+float3 AreaLights(float3 pos)
+{
+	float3 color = 0;
+	uint count = _AreaLightsCount;
+	uint shadowedAreaLightIndex = _ShadowedAreaLightIndex;
+	for (uint i = 0; i < count; i++)
+	{
+		float4 pClip = mul(_AreaLights[i].mat, float4(pos, 1));
+		float3 p = float3(pClip.x / pClip.w, pClip.y / pClip.w, pClip.z);
+		float z = p.z * 0.5 + 0.5;
+
+		float att = 1;
+
+		if (_AreaLights[i].bounded)
+		{
+			att *= saturate(AttenuationToZero(z * z));
+
+			// Magic tweaks to the shape
+			float corner = 0.4;
+			float outset = 0.8;
+			float smooth = 0.7;
+
+			float d = length(max(abs(p.xy) - 1 + corner*outset, 0.0)) - corner;
+			att *= saturate(1 - smoothstep(-smooth, 0, d));
+			att *= smoothstep(-0.01, 0.01, z);
+		}
+
+		#if ANISOTROPY
+		float3 cameraToPos = normalize(pos - _CameraPos.xyz);
+		float4 lightPos = _AreaLights[i].pos;
+		float3 posToLight = lerp(lightPos.xyz, lightPos.xyz - pos, lightPos.w);
+		float costheta = dot(cameraToPos, normalize(posToLight));
+		att *= anisotropy(costheta);
+		#endif
+
+		if (i == shadowedAreaLightIndex && all(abs(p) < 1))
+		{
+		#if VSM
+			float2 shadowmap = _AreaLightShadowmap.SampleLevel(sampler_AreaLightShadowmap, p.xy * 0.5 + 0.5, 0).xy;
+			att *= ChebyshevUpperBound(shadowmap.xy, z);
+		#else
+			float shadowmap = _AreaLightShadowmap.SampleLevel(sampler_AreaLightShadowmap, p.xy * 0.5 + 0.5, 0);
+			float depth = exp(-_ESMExponentAreaLight * z);
+			att *= saturate(shadowmap * depth);
+		#endif
+		}
+
+		color += _AreaLights[i].color * att;
+	}
+	return color;
+}
+#endif
+
+
+[numthreads(16,2,16)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	float3 color = _AmbientLight;
+	float2 uv = float2(id.x/159.0, id.y/89.0);
+	float z = id.z/127.0;
+	z = _NearOverFarClip + z * (1 - _NearOverFarClip);
+	float3 pos = FrustumRay(uv, _FrustumRays) * z + _CameraPos.xyz;
+
+
+	// Directional light
+	#ifdef DIR_LIGHT
+	color += DirectionalLight(pos);
+	#endif
+
+	
+	// Point lights
+	#ifdef POINT_LIGHTS
+	color += PointLights(pos);
+	#endif
+
+
+	// Tube lights
+	#ifdef TUBE_LIGHTS
+	color += TubeLights(pos);
+	#endif
+
+
+	// Area lights
+	#ifdef AREA_LIGHTS
+	color += AreaLights(pos);
+	#endif
+
+
+	// Density
+	float density = Density(pos);
+
+
+	// Output
+	float4 output;
+	output.rgb = _Intensity * density * color;
+	output.a = density;
+	_VolumeInject[id] = output;
+}
+
