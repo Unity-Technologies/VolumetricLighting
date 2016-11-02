@@ -14,7 +14,7 @@ This repository contains some of the lighting effects implemented for the [Unity
 System requirements
 -------------------
 - DX11
-- Unity 5.4.1
+- Tested in Unity 5.4.1, 5.4.2 and 5.5b10
 
 Usage notes
 -----------
