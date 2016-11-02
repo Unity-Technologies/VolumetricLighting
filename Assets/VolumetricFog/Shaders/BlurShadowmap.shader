@@ -69,6 +69,10 @@ Shader "Hidden/BlurShadowmap" {
 		// The texture contains just 0. But we need to sample it somewhere for Unity to initialize the corresponding sampler.
 		z.r += _ShadowmapDummy.Sample(sampler_ShadowmapDummy, 0).a;
 
+		#if UNITY_REVERSED_Z
+			z = 1.0 - z;
+		#endif
+
 		// Transform to linear z, 0 at near, 1 at far
 		z = z * 2 - 1;
 		z = _ZParams.x * (z + 1.0) / (z + _ZParams.y);	

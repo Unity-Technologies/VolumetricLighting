@@ -67,6 +67,14 @@ half EdgeSmooth(half2 xy)
 	return saturate(1 - smoothstep(-smooth, 0, d));	
 }
 
+half ReverseZ(half z)
+{
+#if UNITY_REVERSED_Z
+	return 1.0 - z;
+#endif
+	return z;
+}
+
 half Shadow(half3 position)
 {
 	half4 pClip = mul(_ShadowProjectionMatrix, half4(position, 1));
@@ -83,7 +91,7 @@ half Shadow(half3 position)
 	for(int j = 0; j < 10; ++j)
 	{
 		half2 offset = poisson[j + 24] * _ShadowReceiverWidth;
-		float depth = _Shadowmap.SampleLevel(sampler_ShadowmapDummy, p.xy + offset, 0).r;
+		float depth = ReverseZ(_Shadowmap.SampleLevel(sampler_ShadowmapDummy, p.xy + offset, 0).r);
 
 		dist += max(0.0, p.z - depth);
 	}
@@ -91,6 +99,7 @@ half Shadow(half3 position)
 	dist *= _ShadowReceiverDistanceScale;
 
 	p.z -= _ShadowBias/pClip.w;
+	p.z = ReverseZ(p.z);
 	half shadow = 0;
 	for(int i = 0; i < 32; ++i)
 	{
