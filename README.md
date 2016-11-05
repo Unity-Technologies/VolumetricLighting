@@ -8,13 +8,21 @@ This repository contains some of the lighting effects implemented for the [Unity
 
 ##### Test scenes
 ![area light](http://i.imgur.com/HxwAefB.png)
+Area light with shadows.
+
 ![tube light](http://i.imgur.com/MxS8Jus.png)
+Two tube lights with some locally controlled fog density.
+
 ![tube light](http://i.imgur.com/ZSXoCYX.png)
+Tube light with a shadow plane and global fog noise + wind.
+
+![transparency](http://i.imgur.com/Yr8Zj2S.png)
+Transparent spheres and a point light.
 
 System requirements
 -------------------
 - DX11
-- Tested in Unity 5.4.1, 5.4.2 and 5.5b10
+- Unity 5.4.1
 
 Usage notes
 -----------
@@ -42,7 +50,6 @@ Usage notes
 Known issues and missing functionality
 --------------------------------------
 - Directional light support disabled for now, but should be added soon.
-- The fog can properly affect transparencies, but the standard shader requires a small patch for this to work. An example will be added soon.
 - The froxel resolution is currently hardcoded and larger view distances will cause undersampling issues along the view axis. Should be fixed soon. In the meantime use the *Far Clip Max* setting to limit how far the volumetrics are calculated.
 - The lights only work in deferred rendering and won't affect any objects rendered in forward.
 - No scaling via the transform component - currently the size and shape of the lights can only be changed via the properties of the light component. Changing the scale in the transform component doesn't work.
