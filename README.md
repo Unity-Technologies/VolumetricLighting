@@ -22,7 +22,7 @@ Transparent spheres and a point light.
 System requirements
 -------------------
 - DX11
-- Unity 5.4.1
+- Unity 5.4.1 or newer
 
 Usage notes
 -----------
