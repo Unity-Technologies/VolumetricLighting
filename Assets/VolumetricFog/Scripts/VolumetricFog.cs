@@ -455,7 +455,7 @@ public class VolumetricFog : MonoBehaviour
 		// Compensate for more light and density being injected in per world space meter when near and far are closer.
 		// TODO: Not quite correct yet.
 		float depthCompensation = (farClip - nearClip) * 0.01f;
-		m_InjectLightingAndDensity.SetFloat("_Density", m_GlobalDensityMult * 0.001f * depthCompensation);
+		m_InjectLightingAndDensity.SetFloat("_Density", m_GlobalDensityMult * 0.128f * depthCompensation);
 		m_InjectLightingAndDensity.SetFloat("_Intensity", m_GlobalIntensityMult);
 		m_InjectLightingAndDensity.SetFloat("_Anisotropy", m_Anisotropy);
 		m_InjectLightingAndDensity.SetTexture(kernel, "_VolumeInject", m_VolumeInject);

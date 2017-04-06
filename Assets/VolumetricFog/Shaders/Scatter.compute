@@ -2,37 +2,41 @@
 // https://bartwronski.com/publications/
 
 #pragma kernel CSMain
-#define VOLUME_DEPTH 128
+#define VOLUME_DEPTH 128.0
 
 Texture3D _VolumeInject;
 RWTexture3D<float4> _VolumeScatter;
 
-float Extinction(float density)
+float4 ScatterStep(float3 accumulatedLight, float accumulatedTransmittance, float3 sliceLight, float sliceDensity)
 {
-	return exp(-density);
-}
+	sliceDensity = max(sliceDensity, 0.000001);
+	float  sliceTransmittance = exp(-sliceDensity / VOLUME_DEPTH);
 
-void WriteOutput(in uint3 pos, in float4 colorAndDensity)
-{
-	_VolumeScatter[pos] = float4(colorAndDensity.rgb, Extinction(colorAndDensity.a));
-}
+	// Seb Hillaire's improved transmission by calculating an integral over slice depth instead of
+	// constant per slice value. Light still constant per slice, but that's acceptable. See slide 28 of
+	// Physically-based & Unified Volumetric Rendering in Frostbite
+	// http://www.frostbite.com/2015/08/physically-based-unified-volumetric-rendering-in-frostbite/
+	float3 sliceLightIntegral = sliceLight * (1.0 - sliceTransmittance) / sliceDensity;
 
-float4 AccumulateScattering(float4 colorAndDensityFront, float4 colorAndDensityBack)
-{
-	float3 light = colorAndDensityFront.rgb + saturate(Extinction(colorAndDensityFront.a)) * colorAndDensityBack.rgb;
-	return float4(light.rgb, colorAndDensityFront.a + colorAndDensityBack.a);
+	accumulatedLight += sliceLightIntegral * accumulatedTransmittance;
+	accumulatedTransmittance *= sliceTransmittance;
+	
+	return float4(accumulatedLight, accumulatedTransmittance);
 }
 
 [numthreads(32, 2, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-	float4 currentSlice = _VolumeInject[uint3(id.xy, 0)];
-	WriteOutput(uint3(id.xy, 0), currentSlice);
+	// Store transmission in .a, as opposed to density in _VolumeInject
+	float4 accum = float4(0, 0, 0, 1);
+	uint3 pos = uint3(id.xy, 0);
+	uint steps = VOLUME_DEPTH;
 
-	for(uint z = 1; z < VOLUME_DEPTH; z++)
+	for(uint z = 0; z < steps; z++)
 	{
-		float4 nextValue = _VolumeInject[uint3(id.xy, z)];
-		currentSlice = AccumulateScattering(currentSlice, nextValue);
-		WriteOutput(uint3(id.xy, z), currentSlice);
+		pos.z = z;
+		float4 slice = _VolumeInject[pos];
+		accum = ScatterStep(accum.rgb, accum.a, slice.rgb, slice.a);
+		_VolumeScatter[pos] = accum;
 	}
 }
