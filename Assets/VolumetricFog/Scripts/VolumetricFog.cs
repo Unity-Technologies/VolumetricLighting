@@ -44,10 +44,6 @@ public class VolumetricFog : MonoBehaviour
 	RenderTexture m_VolumeScatter;
 	Vector3i m_VolumeResolution = new Vector3i(160, 90, 128);
 	Camera m_Camera;
-	Camera m_ShadowmapCamera;
-	RenderTexture m_Shadowmap;
-	RenderTexture m_ShadowmapBlurred;
-	int m_ShadowmapRes = 1024;
 
 	// Density
 	public float m_ConstantFog = 0;
@@ -70,18 +66,6 @@ public class VolumetricFog : MonoBehaviour
 	[MinValue(0)]
 	public float m_AmbientLightIntensity = 0.0f;
 	public Color m_AmbientLightColor = Color.white;
-
-	[HideInInspector]
-	public bool m_BlurShadowmap = false;
-	[HideInInspector]
-	[Range(0, 2)]
-	public int m_ShadowmapDownsample = 1;
-	[HideInInspector]
-	[Range(0.0f, 10.0f)]
-	public float m_BlurSize = 3.0f;
-	[HideInInspector]
-	[Range(1, 4)]
-	public int m_BlurIterations = 2;
 
 	struct Vector3i
 	{
@@ -459,7 +443,6 @@ public class VolumetricFog : MonoBehaviour
 		m_InjectLightingAndDensity.SetFloat("_Intensity", m_GlobalIntensityMult);
 		m_InjectLightingAndDensity.SetFloat("_Anisotropy", m_Anisotropy);
 		m_InjectLightingAndDensity.SetTexture(kernel, "_VolumeInject", m_VolumeInject);
-		m_InjectLightingAndDensity.SetTexture(kernel, "_Shadowmap", m_BlurShadowmap ? m_ShadowmapBlurred : (m_Shadowmap != null ? m_Shadowmap : (Texture)Texture2D.whiteTexture));
 		m_InjectLightingAndDensity.SetTexture(kernel, "_Noise", m_Noise);
 
 		if (m_fogParams == null || m_fogParams.Length != 4)
@@ -510,8 +493,6 @@ public class VolumetricFog : MonoBehaviour
 		m_Scatter.SetTexture(0, "_VolumeInject", m_VolumeInject);
 		m_Scatter.SetTexture(0, "_VolumeScatter", m_VolumeScatter);
 		m_Scatter.Dispatch(0, m_VolumeResolution.x/m_ScatterNumThreads.x, m_VolumeResolution.y/m_ScatterNumThreads.y, 1);
-
-		ReleaseTempResources();
 	}
 
 	void DebugDisplay(RenderTexture src, RenderTexture dest)
@@ -520,8 +501,6 @@ public class VolumetricFog : MonoBehaviour
 
 		m_DebugMaterial.SetTexture("_VolumeInject", m_VolumeInject);
 		m_DebugMaterial.SetTexture("_VolumeScatter", m_VolumeScatter);
-		m_DebugMaterial.SetTexture("_Shadowmap", m_Shadowmap);
-		m_DebugMaterial.SetTexture("_ShadowmapBlurred", m_ShadowmapBlurred);
 		m_DebugMaterial.SetFloat("_Z", m_Z);
 
 		m_DebugMaterial.SetTexture("_MainTex", src);
@@ -634,11 +613,6 @@ public class VolumetricFog : MonoBehaviour
 
 	void InitResources ()
 	{
-		// Shadowmap
-		m_Shadowmap = RenderTexture.GetTemporary(m_ShadowmapRes, m_ShadowmapRes, 24, RenderTextureFormat.RFloat);
-		m_Shadowmap.filterMode = FilterMode.Bilinear;
-		m_Shadowmap.wrapMode = TextureWrapMode.Clamp;
-
 		// Volume
 		InitVolume(ref m_VolumeInject);
 		InitVolume(ref m_VolumeScatter);
@@ -687,12 +661,6 @@ public class VolumetricFog : MonoBehaviour
 
 		RenderTexture.ReleaseTemporary(rt);
 		rt = null;
-	}
-
-	void ReleaseTempResources()
-	{
-		ReleaseTemporary(ref m_Shadowmap);
-		ReleaseTemporary(ref m_ShadowmapBlurred);
 	}
 
 	void InitMaterial(ref Material material, Shader shader)

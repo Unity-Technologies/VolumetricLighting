@@ -11,8 +11,6 @@
 #endif
 
 RWTexture3D<half4> _VolumeInject;
-Texture2D _Shadowmap;
-SamplerState sampler_Shadowmap;
 float4 _FrustumRays[4];
 float4 _CameraPos;
 float4 _FrustumRaysLight[4];
