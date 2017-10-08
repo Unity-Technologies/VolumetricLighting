@@ -520,6 +520,14 @@ public class VolumetricFog : MonoBehaviour
 	[ImageEffectOpaque]
 	void OnRenderImage(RenderTexture src, RenderTexture dest)
 	{
+		if (!CheckSupport())
+		{
+			Debug.LogError(GetUnsupportedErrorMessage());
+			Graphics.Blit(src, dest);
+			enabled = false;
+			return;
+		}
+
 		if(m_Debug)
 		{
 			DebugDisplay(src, dest);
@@ -683,5 +691,16 @@ public class VolumetricFog : MonoBehaviour
 		Gizmos.color = Color.yellow;
 		Gizmos.matrix = transform.localToWorldMatrix;
 		Gizmos.DrawFrustum(Vector3.zero, cam.fieldOfView, farClip, nearClip, cam.aspect);
+	}
+
+	public static bool CheckSupport()
+	{
+		return SystemInfo.supportsComputeShaders;
+	}
+
+	public static string GetUnsupportedErrorMessage()
+	{
+		return "Volumetric Fog requires compute shaders and this platform doesn't support them. Disabling. \nDetected device type: " + 
+			SystemInfo.graphicsDeviceType + ", version: " + SystemInfo.graphicsDeviceVersion;
 	}
 }
