@@ -21,8 +21,8 @@ Transparent spheres and a point light.
 
 System requirements
 -------------------
-- DX11
-- Unity 5.6
+- Compute shaders. Tested on dx11, dx12 and osx with metal. Might work on other platforms with compute shaders too.
+- Tested in Unity 5.6 to Unity 2017.1.2. Please let me know in case of trouble in a newer version.
 
 Usage notes
 -----------
