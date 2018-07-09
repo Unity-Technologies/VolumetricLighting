@@ -145,6 +145,8 @@ public class VolumetricFog : MonoBehaviour
 	FogEllipsoidParams[] m_FogEllipsoidParams;
 	ComputeBuffer m_FogEllipsoidParamsCB;
 
+	ComputeBuffer m_DummyCB;
+
 	Camera cam{ get { if (m_Camera == null) m_Camera = GetComponent<Camera>(); return m_Camera; }}
 
 	float nearClip { get { return Mathf.Max(0, m_NearClip); } }
@@ -176,6 +178,7 @@ public class VolumetricFog : MonoBehaviour
 		ReleaseComputeBuffer(ref m_TubeLightShadowPlaneParamsCB);
 		ReleaseComputeBuffer(ref m_AreaLightParamsCB);
 		ReleaseComputeBuffer(ref m_FogEllipsoidParamsCB);
+		ReleaseComputeBuffer(ref m_DummyCB);
 		m_VolumeInject = null;
 		m_VolumeScatter = null;
 	}
@@ -192,7 +195,11 @@ public class VolumetricFog : MonoBehaviour
 		int count = m_PointLightParamsCB == null ? 0 : m_PointLightParamsCB.count;
 		m_InjectLightingAndDensity.SetFloat("_PointLightsCount", count);
 		if (count == 0)
+		{
+			// Can't not set the buffer
+			m_InjectLightingAndDensity.SetBuffer(kernel, "_PointLights", m_DummyCB);
 			return;
+		}
 
 		if (m_PointLightParams == null || m_PointLightParams.Length != count)
 			m_PointLightParams = new PointLightParams[count];
@@ -226,7 +233,12 @@ public class VolumetricFog : MonoBehaviour
 		int count = m_TubeLightParamsCB == null ? 0 : m_TubeLightParamsCB.count;
 		m_InjectLightingAndDensity.SetFloat("_TubeLightsCount", count);
 		if (count == 0)
+		{
+			// Can't not set the buffer
+			m_InjectLightingAndDensity.SetBuffer(kernel, "_TubeLights", m_DummyCB);
+			m_InjectLightingAndDensity.SetBuffer(kernel, "_TubeLightShadowPlanes", m_DummyCB);
 			return;
+		}
 
 		if (m_TubeLightParams == null || m_TubeLightParams.Length != count)
 			m_TubeLightParams = new TubeLightParams[count];
@@ -277,7 +289,11 @@ public class VolumetricFog : MonoBehaviour
 		int count = m_AreaLightParamsCB == null ? 0 : m_AreaLightParamsCB.count;
 		m_InjectLightingAndDensity.SetFloat("_AreaLightsCount", count);
 		if (count == 0)
+		{
+			// Can't not set the buffer
+			m_InjectLightingAndDensity.SetBuffer(kernel, "_AreaLights", m_DummyCB);
 			return;
+		}
 
 		if (m_AreaLightParams == null || m_AreaLightParams.Length != count)
 			m_AreaLightParams = new AreaLightParams[count];
@@ -330,7 +346,11 @@ public class VolumetricFog : MonoBehaviour
 
 		m_InjectLightingAndDensity.SetFloat("_FogEllipsoidsCount", count);
 		if (count == 0)
+		{
+			// Can't not set the buffer
+			m_InjectLightingAndDensity.SetBuffer(kernel, "_FogEllipsoids", m_DummyCB);
 			return;
+		}
 
 		if (m_FogEllipsoidParams == null || m_FogEllipsoidParams.Length != count)
 			m_FogEllipsoidParams = new FogEllipsoidParams[count];
@@ -472,6 +492,8 @@ public class VolumetricFog : MonoBehaviour
 		m_ambientLight[1] = ambient.g;
 		m_ambientLight[2] = ambient.b;
 		m_InjectLightingAndDensity.SetFloats("_AmbientLight", m_ambientLight);
+
+		m_DummyCB = new ComputeBuffer(1, 4);
 
 		SetUpPointLightBuffers(kernel);
 		SetUpTubeLightBuffers(kernel);
