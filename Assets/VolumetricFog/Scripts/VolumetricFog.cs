@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.Serialization;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 [ExecuteInEditMode]
 [RequireComponent (typeof(Camera))]
@@ -667,22 +668,12 @@ public class VolumetricFog : MonoBehaviour
 			}
 		}
 
-		// PointLightParams {float3 float float3 float} -> 32 bytes
-		CreateBuffer(ref m_PointLightParamsCB, pointLightCount, 32);
-
-		// TubeLightParams {float3 float float3 float float3 float} -> 48 bytes
-		CreateBuffer(ref m_TubeLightParamsCB, tubeLightCount, 48);
-
-		// TubeLightShadowPlaneParams {float4 float4 float float float float} -> 48 bytes
-		CreateBuffer(ref m_TubeLightShadowPlaneParamsCB, tubeLightCount, 48);
-
-		// TubeLightParams {float4x4 float4 float3 float} -> 96 bytes
-		CreateBuffer(ref m_AreaLightParamsCB, areaLightCount, 96);
-
-		// FogEllipsoidParams {float3 float float3 9xfloat} -> 64 bytes
+		CreateBuffer(ref m_PointLightParamsCB, pointLightCount, Marshal.SizeOf(typeof(PointLightParams)));
+		CreateBuffer(ref m_TubeLightParamsCB, tubeLightCount, Marshal.SizeOf(typeof(TubeLightParams)));
+		CreateBuffer(ref m_TubeLightShadowPlaneParamsCB, tubeLightCount, Marshal.SizeOf(typeof(TubeLightShadowPlaneParams)));
+		CreateBuffer(ref m_AreaLightParamsCB, areaLightCount, Marshal.SizeOf(typeof(AreaLightParams)));
 		HashSet<FogEllipsoid> fogEllipsoids = LightManagerFogEllipsoids.Get();
-		CreateBuffer(ref m_FogEllipsoidParamsCB, fogEllipsoids == null ? 0 : fogEllipsoids.Count, 64);
-
+		CreateBuffer(ref m_FogEllipsoidParamsCB, fogEllipsoids == null ? 0 : fogEllipsoids.Count, Marshal.SizeOf(typeof(FogEllipsoidParams)));
 		CreateBuffer(ref m_DummyCB, 1, 4);
 	}
 
