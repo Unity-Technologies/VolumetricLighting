@@ -493,8 +493,6 @@ public class VolumetricFog : MonoBehaviour
 		m_ambientLight[2] = ambient.b;
 		m_InjectLightingAndDensity.SetFloats("_AmbientLight", m_ambientLight);
 
-		m_DummyCB = new ComputeBuffer(1, 4);
-
 		SetUpPointLightBuffers(kernel);
 		SetUpTubeLightBuffers(kernel);
 		SetUpAreaLightBuffers(kernel);
@@ -682,6 +680,8 @@ public class VolumetricFog : MonoBehaviour
 		// FogEllipsoidParams {float3 float float3 9xfloat} -> 64 bytes
 		HashSet<FogEllipsoid> fogEllipsoids = LightManagerFogEllipsoids.Get();
 		CreateBuffer(ref m_FogEllipsoidParamsCB, fogEllipsoids == null ? 0 : fogEllipsoids.Count, 64);
+
+		CreateBuffer(ref m_DummyCB, 1, 4);
 	}
 
 	void ReleaseTemporary(ref RenderTexture rt)
