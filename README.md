@@ -22,7 +22,7 @@ Transparent spheres and a point light.
 System requirements
 -------------------
 - Compute shaders. Tested on dx11, dx12 and osx with metal. Might work on other platforms with compute shaders too.
-- Tested in Unity 5.6 to Unity 2018.2.0f1. Please let me know in case of trouble in a newer version.
+- Tested in Unity 5.6 to Unity 2018.3.0b5. Please let me know in case of trouble in a newer version.
 
 Usage notes
 -----------
@@ -56,7 +56,7 @@ Known issues and missing functionality
 - Currently the lights always render as back faces of the proxy mesh, without using the stencil buffer. A proper deferred light needs to be rendered as front faces, back faces or a quad (depending on the intersections with the near and far plane) and cull pixels using stencil. Not implemented for Adam, since wouldn't have changed anything with our specific cameras and light setup, but necessary for the lights to be universal.
 - The material emission of the light source mesh (the quad and the capsule) is only a rough approximation - needs to be calculated properly.
 - Banding - there's quite a bit of banding, particularly visible in those dark scenes above; needs to be solved somehow. Note that banding isn't the same as aliasing. The latter creates differently looking bands and happens due to the froxel resolution being too low (below the Nyquist frequency) for the sharpness of features in the fog (shadow edges, quick changing gradients). To fix aliasing, increase froxel resolution (controls coming, or decrease *Far Clip Max*), or make the features in the fog smoother (e.g. by blurring the shadows more).
-- Area light's have Unity's standard shader BRDF *baked* into it's lookup tables. To make them work with a different shader, it's BRDF would have to baked into new lookup tables. There's currently no tool to do that, but we should make one. In the meantime take a look at the original paper in the references.
+- Area light's have Unity's standard shader BRDF *baked* into its lookup tables. To make them work with a different shader, its BRDF would have to baked into new lookup tables. There's currently no tool to do that, but we should make one. In the meantime take a look at the original paper in the references.
 
 
 Contact

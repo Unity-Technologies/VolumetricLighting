@@ -3,3 +3,4 @@
 /obj
 *.sln
 *.csproj
+.vscode/settings.json
