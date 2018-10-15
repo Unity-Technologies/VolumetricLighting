@@ -290,8 +290,9 @@ public class VolumetricFog : MonoBehaviour
 		m_InjectLightingAndDensity.SetFloat("_AreaLightsCount", count);
 		if (count == 0)
 		{
-			// Can't not set the buffer
+			// Can't not set the buffers/textures
 			m_InjectLightingAndDensity.SetBuffer(kernel, "_AreaLights", m_DummyCB);
+			m_InjectLightingAndDensity.SetTexture(kernel, "_AreaLightShadowmap", Texture2D.whiteTexture);
 			return;
 		}
 
@@ -300,7 +301,7 @@ public class VolumetricFog : MonoBehaviour
 
 		HashSet<FogLight> fogLights = LightManagerFogLights.Get();
 
-		int shadowedAreaLightIndex = fogLights.Count;
+		int shadowedAreaLightIndex = -1;
 		int j = 0;
 		for (var x = fogLights.GetEnumerator(); x.MoveNext();)
 		{
@@ -328,10 +329,11 @@ public class VolumetricFog : MonoBehaviour
 
 			j++;
 		}
-
 		m_AreaLightParamsCB.SetData(m_AreaLightParams);
 		m_InjectLightingAndDensity.SetBuffer(kernel, "_AreaLights", m_AreaLightParamsCB);
-		m_InjectLightingAndDensity.SetFloat("_ShadowedAreaLightIndex", shadowedAreaLightIndex);
+		m_InjectLightingAndDensity.SetFloat("_ShadowedAreaLightIndex", shadowedAreaLightIndex < 0 ? fogLights.Count : shadowedAreaLightIndex);
+		if (shadowedAreaLightIndex < 0)
+			m_InjectLightingAndDensity.SetTexture(kernel, "_AreaLightShadowmap", Texture2D.whiteTexture);
 	}
 
 	void SetUpFogEllipsoidBuffers(int kernel)
