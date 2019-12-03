@@ -3,6 +3,10 @@ Volumetric fog, area lights and tube lights
 
 This repository contains some of the lighting effects implemented for the [Unity Adam demo](https://unity3d.com/pages/adam): volumetric fog, area lights and tube lights.
 
+## Now integrated in HDRP
+
+Volumetric fog is now included in the High Definition Rendering Pipeline (HDRP) : https://docs.unity3d.com/Manual/pack-keys.html => High Definition RP => Lighting / Lighting Volumetric. This package is intended for Unity Adam demo and Legacy usage, it will mostly get compatibility fixes.
+
 ##### Adam
 ![fog in the Adam demo](http://i.imgur.com/XYExw51.gif)
 
@@ -22,7 +26,7 @@ Transparent spheres and a point light.
 System requirements
 -------------------
 - Compute shaders. Tested on dx11, dx12 and osx with metal. Might work on other platforms with compute shaders too.
-- Tested in Unity 5.6 to Unity 2018.3.0b5. Please let me know in case of trouble in a newer version.
+- Tested in Unity 5.6 to Unity 2019.3.0b12. Please let me know in case of trouble in a newer version.
 
 Usage notes
 -----------
